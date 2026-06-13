@@ -11,7 +11,7 @@ Lift::Lift(int floors)
     isMoving(false), directionUp(true), isWaiting(true),
     requestCounter(0), liftSpeed(1.0), floorHeight(2.8),
     currentTime(0, 0, 0), lastPickCount(false), lastDropCount(false),
-    lastPrintedFloor(-1) {  
+    lastPrintedFloor(-1) {
 
     if (floors < 2)
         throw LogicException("Количество этажей должно быть не менее 2");
@@ -32,45 +32,46 @@ double Lift::getStopTime() const {
     return BASE_STOP_TIME;
 }
 
-void Lift::sortRequests() {
+void Lift::sortRequests() {  // Пузырьковая сортировка очереди по времени вызова
     if (pendingRequests.isEmpty()) return;
 
     int count = pendingRequests.size();
 
-    for (int i = 0; i < count - 1; i++) {
-        Queue temp;
+    for (int i = 0; i < count - 1; i++) {          // Повторяем проходы, пока есть перестановки
+        Queue temp;              // Временная очередь для перестановок
         Request prev;
         bool first = true;
-        bool swapped = false;
+        bool swapped = false;       // Флаг: были ли перестановки в этом проходе
 
         while (!pendingRequests.isEmpty()) {
             Request current = pendingRequests.front();
             pendingRequests.dequeue();
 
             if (first) {
-                prev = current;
+                prev = current;   // Первый элемент — не с чем сравнивать
                 first = false;
                 continue;
             }
 
+            // Сравниваем время двух соседних заявок, меняем местами если порядок нарушен
             if (prev.getCallTime().toSeconds() > current.getCallTime().toSeconds()) {
-                temp.enqueue(current);
+                temp.enqueue(current);               // Более ранняя становится первой
                 swapped = true;
             }
             else {
-                temp.enqueue(prev);
+                temp.enqueue(prev);    // Порядок правильный
                 prev = current;
             }
         }
 
-        temp.enqueue(prev);
+        temp.enqueue(prev);       // Последний элемент
 
-        while (!temp.isEmpty()) {
+        while (!temp.isEmpty()) {                    // Возвращаем отсортированное в основную очередь
             pendingRequests.enqueue(temp.front());
             temp.dequeue();
         }
 
-        if (!swapped) break;
+        if (!swapped) break;         // Нет перестановок — очередь отсортирована
     }
 }
 
@@ -82,29 +83,25 @@ void Lift::addRequest(const Time& callTime, int fromFloor, int toFloor) {
     if (fromFloor == toFloor)
         throw InvalidInputException("Этаж посадки не может совпадать с этажом назначения");
 
-    
-    if (!isWaiting) {
-        int callSec = callTime.toSeconds();
-        int currentSec = currentTime.toSeconds();
-        // Заявки с временем более чем на минуту раньше текущего — отклоняются
-        if (!isWaiting && (currentTime.toSeconds() - callTime.toSeconds()) > 60) {
-            throw InvalidInputException("Время заявки (" + callTime.toString() +
-                ") уже прошло. Текущее время лифта: " + currentTime.toString());
-        }
+    // Проверка для повторного запуска: заявки с временем более минуты назад отклоняются
+    if (!isWaiting && (currentTime.toSeconds() - callTime.toSeconds()) > 60) {
+        throw InvalidInputException("Время заявки (" + callTime.toString() +
+            ") уже прошло. Текущее время лифта: " + currentTime.toString());
     }
 
     requestCounter++;
     Request req(requestCounter, callTime, fromFloor, toFloor);
     pendingRequests.enqueue(req);
 }
+
 void Lift::generateRandomRequests(int count, int spanMinutes, int startMinutes) {
     std::cout << "\nСоздаю " << count << " заявок..." << std::endl;
     for (int i = 0; i < count; i++) {
-        int minutesOffset = rand() % (spanMinutes + 1);
+        int minutesOffset = rand() % (spanMinutes + 1);       // Случайное смещение в пределах интервала
         Time callTime(0, startMinutes + minutesOffset, 0);
         int from = 1 + (rand() % totalFloors);
         int to = 1 + (rand() % totalFloors);
-        while (to == from) to = 1 + (rand() % totalFloors);
+        while (to == from) to = 1 + (rand() % totalFloors);  // Гарантируем, что этажи разные
         requestCounter++;
         Request req(requestCounter, callTime, from, to);
         pendingRequests.enqueue(req);
@@ -119,13 +116,13 @@ int Lift::loadRequestsFromFile(const std::string& filename) {
     std::string line;
     int lineNum = 0;
     int loadedCount = 0;
-    bool floorsRead = false;
+    bool floorsRead = false;   // Первая значимая строка — этажи
 
     while (std::getline(file, line)) {
         lineNum++;
-        if (line.empty() || line[0] == '#') continue;
+        if (line.empty() || line[0] == '#') continue;   // Пропуск пустых строк и комментариев
 
-        if (!floorsRead) {
+        if (!floorsRead) {         // Читаем количество этажей
             std::stringstream ss(line);
             int floors;
             if (ss >> floors) {
@@ -181,30 +178,13 @@ void Lift::printStatus() const {
     std::cout << "==================================================" << std::endl;
 }
 
-void Lift::printPassengersList() const {
-    if (insidePassengers.isEmpty()) return;
-    Queue temp = insidePassengers;
-    int index = 1;
-    while (!temp.isEmpty()) {
-        Request req = temp.front(); temp.dequeue();
-        std::cout << "    " << index << ". " << req.getFromFloor() << " -> " << req.getToFloor() << std::endl;
-        index++;
-    }
-}
-
-// ========== ТАБЛИЦА ==========
 void Lift::printSimRow(const std::string& time, const std::string& mode,
     int floor, const std::string& direction,
-    int inLift, const std::string& details,
-    bool addSeparator) {
+    int inLift, const std::string& details, bool addSeparator) {
 
-    // Добавляем пустую строку только если этаж изменился
     if (lastPrintedFloor != -1 && lastPrintedFloor != floor) {
-        std::cout << std::endl;
+        std::cout << std::endl;    // Пустая строка между разными этажами
     }
-
-    // addSeparator больше не используем для пустых строк
-    // if (addSeparator) std::cout << std::endl;  // Убираем эту строку
 
     std::cout << std::left;
     std::cout << " " << std::setw(10) << time;
@@ -234,24 +214,25 @@ void Lift::printSimFooter() {
     std::cout << std::string(95, '—') << std::endl;
 }
 
-bool Lift::needsStopHere() const {
-    // Проверка 1: есть ли пассажиры, которым нужно выйти на этом этаже
+bool Lift::needsStopHere() const {  // Проверка необходимости остановки на текущем этаже
+    // Проверка 1: высадка — всегда остановка
     Queue temp = insidePassengers;
     while (!temp.isEmpty()) {
-        if (temp.front().getToFloor() == currentFloor) return true;  // высадка — всегда остановка
+        if (temp.front().getToFloor() == currentFloor) return true;
         temp.dequeue();
     }
 
-    // Если лифт заполнен — не останавливаемся для посадки
+    // Проверка 2: лифт заполнен — посадка невозможна
     if (insidePassengers.size() >= MAX_CAPACITY) return false;
 
-    // Проверка 2: есть ли ожидающие заявки с этого этажа
+    // Проверка 3: ожидающие заявки на этаже
     temp = pendingRequests;
     while (!temp.isEmpty()) {
         Request req = temp.front();
         temp.dequeue();
         if (req.getCallTime().toSeconds() <= currentTime.toSeconds() &&
             req.getFromFloor() == currentFloor) {
+            // Лифт пуст — берём любую заявку, иначе только попутные
             if (insidePassengers.isEmpty() ||
                 (directionUp && req.getToFloor() > currentFloor) ||
                 (!directionUp && req.getToFloor() < currentFloor)) return true;
@@ -259,16 +240,14 @@ bool Lift::needsStopHere() const {
     }
     return false;
 }
-void Lift::showStopIfNeeded() {
+
+void Lift::showStopIfNeeded() {  // Вывод строки ОСТАНОВКА, если были события
     if (isMoving) return;
 
     std::stringstream details;
     bool hasStop = false;
 
-    if (lastDropCount) {
-        details << lastDropDetails;
-        hasStop = true;
-    }
+    if (lastDropCount) { details << lastDropDetails; hasStop = true; }
     if (lastPickCount) {
         if (hasStop) details << ", ";
         details << lastPickDetails;
@@ -285,12 +264,12 @@ void Lift::showStopIfNeeded() {
     }
 }
 
-void Lift::runModeling() {
+void Lift::runModeling() {  // Основной цикл моделирования работы лифта
     if (pendingRequests.isEmpty()) {
         std::cout << "\nОШИБКА: Нет заявок для моделирования." << std::endl;
         return;
     }
-    sortRequests();
+    sortRequests();          // Сортируем заявки по времени перед запуском
     lastPrintedFloor = -1;
 
     std::cout << "\n======= МОДЕЛИРОВАНИЕ ЗАПУЩЕНО =======" << std::endl;
@@ -309,13 +288,13 @@ void Lift::runModeling() {
     printSimHeader();
 
     while (!pendingRequests.isEmpty() || !insidePassengers.isEmpty()) {
-        // Ожидание первой заявки
+        // 1: ожидание первой заявки (перемотка времени)
         if (isWaiting && !pendingRequests.isEmpty()) {
             Request firstReq = pendingRequests.front();
             int callSeconds = firstReq.getCallTime().toSeconds();
             int currentSeconds = currentTime.toSeconds();
 
-            if (callSeconds > currentSeconds) {
+            if (callSeconds > currentSeconds) {       // Заявка в будущем — ждём
                 std::stringstream ss;
                 ss << "ждёт до " << firstReq.getCallTime().toString()
                     << " (заявка #" << firstReq.getId() << ": "
@@ -328,10 +307,12 @@ void Lift::runModeling() {
             isWaiting = false;
         }
 
+        // 2: посадка и высадка на текущем этаже
         processNewRequests();
         showStopIfNeeded();
         decideNextMove();
 
+        // 3: движение до следующей остановки
         if (isMoving) {
             while (isMoving) {
                 double travelTime = getTravelTime();
@@ -346,7 +327,7 @@ void Lift::runModeling() {
                     directionUp ? "вверх" : "вниз",
                     static_cast<int>(insidePassengers.size()), composition);
 
-                if (stopNeeded) {
+                if (stopNeeded) {        // Прибыли на этаж с событиями
                     isMoving = false;
                     disembarkPassengers();
                     processNewRequests();
@@ -373,7 +354,7 @@ void Lift::printHistory() const {
     std::cout << "==============================" << std::endl;
 }
 
-std::string Lift::formatPickDetails(Queue& pickedList) {
+std::string Lift::formatPickDetails(Queue& pickedList) {  // Формирование строки "+ заявка"
     std::stringstream ss;
     while (!pickedList.isEmpty()) {
         Request req = pickedList.front();
@@ -387,7 +368,7 @@ std::string Lift::formatPickDetails(Queue& pickedList) {
     return ss.str();
 }
 
-std::string Lift::formatDropDetails(Queue& leftList) {
+std::string Lift::formatDropDetails(Queue& leftList) {  // Формирование строки "- заявка"
     std::stringstream ss;
     while (!leftList.isEmpty()) {
         Request req = leftList.front();
@@ -398,7 +379,7 @@ std::string Lift::formatDropDetails(Queue& leftList) {
     return ss.str();
 }
 
-std::string Lift::formatComposition() const {
+std::string Lift::formatComposition() const {   // Формирование строки состава лифта
     if (insidePassengers.isEmpty()) return "";
     std::stringstream ss;
     ss << "состав: ";
@@ -413,8 +394,8 @@ std::string Lift::formatComposition() const {
     }
     return ss.str();
 }
-// ==================== ПРИВАТНЫЕ ====================
-void Lift::processNewRequests() {
+
+void Lift::processNewRequests() {  // Посадка пассажиров: сначала попутные, потом любые
     if (pendingRequests.isEmpty()) { lastPickCount = false; return; }
 
     Queue tempQueue, pickedList;
@@ -427,39 +408,35 @@ void Lift::processNewRequests() {
         pendingRequests.dequeue();
 
         if (insidePassengers.size() >= MAX_CAPACITY) {
-            tempQueue.enqueue(req);
+            tempQueue.enqueue(req);           // Лифт заполнен — заявка ждёт
             continue;
         }
 
         if (req.getCallTime().toSeconds() <= currentTime.toSeconds() &&
             req.getFromFloor() == currentFloor && !isMoving) {
 
-            // Лифт пуст — берём всех
-            if (insidePassengers.isEmpty()) {
+            if (insidePassengers.isEmpty()) {    // Лифт пуст — берём всех
                 insidePassengers.enqueue(req);
                 pickedList.enqueue(req);
                 pickedSomeone = true;
                 continue;
             }
 
-            // Есть высадка — приоритет попутным
-            if (lastDropCount) {
+            if (lastDropCount) {                         // Была высадка — приоритет попутным
                 bool isSameDirection = (directionUp && req.getToFloor() > currentFloor) ||
                     (!directionUp && req.getToFloor() < currentFloor);
                 if (isSameDirection) {
                     insidePassengers.enqueue(req);
                     pickedList.enqueue(req);
                     pickedSomeone = true;
-                    hasSameDirection = true;
+                    hasSameDirection = true;   // Запомнили, что попутные есть
                     continue;
                 }
-                // Не попутная — откладываем
-                tempQueue.enqueue(req);
+                tempQueue.enqueue(req);   // Не попутная — откладываем
                 continue;
             }
 
-            // Нет высадки — только попутные
-            if (!lastDropCount) {
+            if (!lastDropCount) {   // Нет высадки — только попутные
                 bool isSameDirection = (directionUp && req.getToFloor() > currentFloor) ||
                     (!directionUp && req.getToFloor() < currentFloor);
                 if (isSameDirection) {
@@ -473,7 +450,7 @@ void Lift::processNewRequests() {
         tempQueue.enqueue(req);
     }
 
-    // Второй проход: если была высадка, но попутных нет — берём любого
+    // Второй проход: если была высадка, но попутных нет — берём любого одного
     if (lastDropCount && !hasSameDirection && !tempQueue.isEmpty()) {
         Queue remaining;
         while (!tempQueue.isEmpty()) {
@@ -485,7 +462,7 @@ void Lift::processNewRequests() {
                 insidePassengers.enqueue(req);
                 pickedList.enqueue(req);
                 pickedSomeone = true;
-                break;  // берём одного
+                break;     // Берём только одного
             }
             remaining.enqueue(req);
         }
@@ -495,13 +472,11 @@ void Lift::processNewRequests() {
         }
     }
 
-    // Возвращаем необработанные заявки обратно в очередь
-    while (!tempQueue.isEmpty()) {
+    while (!tempQueue.isEmpty()) {     // Возвращаем необработанные в очередь
         pendingRequests.enqueue(tempQueue.front());
         tempQueue.dequeue();
     }
 
-    // Формируем строку для вывода
     if (pickedSomeone) {
         lastPickDetails = formatPickDetails(pickedList);
         lastPickCount = true;
@@ -510,7 +485,8 @@ void Lift::processNewRequests() {
         lastPickCount = false;
     }
 }
-void Lift::disembarkPassengers() {
+
+void Lift::disembarkPassengers() {  // Высадка пассажиров на текущем этаже
     if (insidePassengers.isEmpty()) { lastDropCount = false; return; }
 
     Queue tempQueue, leftList;
@@ -518,29 +494,37 @@ void Lift::disembarkPassengers() {
 
     while (!insidePassengers.isEmpty()) {
         Request req = insidePassengers.front(); insidePassengers.dequeue();
-        if (req.getToFloor() == currentFloor) {
-            completedRequests.enqueue(req);
+        if (req.getToFloor() == currentFloor) {   // Приехали — высаживаем
+            completedRequests.enqueue(req);    // В историю обслуживания
             leftList.enqueue(req);
             disembarked = true;
         }
-        else { tempQueue.enqueue(req); }
+        else {
+            tempQueue.enqueue(req);  // Едем дальше
+        }
     }
 
-    while (!tempQueue.isEmpty()) { insidePassengers.enqueue(tempQueue.front()); tempQueue.dequeue(); }
+    while (!tempQueue.isEmpty()) {
+        insidePassengers.enqueue(tempQueue.front());
+        tempQueue.dequeue();
+    }
 
     if (disembarked) {
         lastDropDetails = formatDropDetails(leftList);
         lastDropCount = true;
     }
-    else { lastDropCount = false; }
+    else {
+        lastDropCount = false;
+    }
 }
-void Lift::decideNextMove() {
+
+void Lift::decideNextMove() {  // Выбор направления движения
     if (insidePassengers.isEmpty() && pendingRequests.isEmpty()) {
         isMoving = false;
         return;
     }
 
-    // Приоритет 1: Если есть пассажиры внутри - едем к их этажам назначения
+    // Приоритет 1: есть пассажиры — едем к этажу первого вошедшего
     if (!insidePassengers.isEmpty()) {
         Request first = insidePassengers.front();
         directionUp = (first.getToFloor() > currentFloor);
@@ -553,13 +537,12 @@ void Lift::decideNextMove() {
         return;
     }
 
-    // Приоритет 2: Лифт пустой - ищем заявку
+    // Приоритет 2: лифт пуст — ищем заявку
     if (!pendingRequests.isEmpty()) {
-        // Находим самую раннюю заявку по времени
         Request best = pendingRequests.front();
         int earliestTime = best.getCallTime().toSeconds();
 
-        // Собираем все заявки с одинаковым (самым ранним) временем
+        // Собираем все заявки с самым ранним временем (кандидаты)
         Queue candidates;
         Queue temp = pendingRequests;
         while (!temp.isEmpty()) {
@@ -570,7 +553,7 @@ void Lift::decideNextMove() {
             }
         }
 
-        // Среди кандидатов ищем ближайшую по расстоянию
+        // Среди кандидатов: ближайшая -> попутная -> первая добавленная
         best = candidates.front();
         candidates.dequeue();
         int bestDist = abs(best.getFromFloor() - currentFloor);
@@ -580,19 +563,18 @@ void Lift::decideNextMove() {
             candidates.dequeue();
             int currentDist = abs(current.getFromFloor() - currentFloor);
 
-            if (currentDist < bestDist) {
+            if (currentDist < bestDist) {  // Ближе — выбираем
                 best = current;
                 bestDist = currentDist;
             }
-            // Если расстояние одинаковое - предпочитаем заявку в текущем направлении
-            else if (currentDist == bestDist) {
+            else if (currentDist == bestDist) {    // Одинаково — по направлению
                 bool currentSameDir = (directionUp && current.getFromFloor() > currentFloor) ||
                     (!directionUp && current.getFromFloor() < currentFloor);
                 bool bestSameDir = (directionUp && best.getFromFloor() > currentFloor) ||
                     (!directionUp && best.getFromFloor() < currentFloor);
 
                 if (currentSameDir && !bestSameDir) {
-                    best = current;
+                    best = current;        // Попутная в приоритете
                 }
             }
         }
@@ -600,8 +582,7 @@ void Lift::decideNextMove() {
         int callSeconds = best.getCallTime().toSeconds();
         int currentSeconds = currentTime.toSeconds();
 
-        // Если заявка ещё не наступила - ждём
-        if (callSeconds > currentSeconds) {
+        if (callSeconds > currentSeconds) {    // Время не наступило — ждём
             std::stringstream ss;
             ss << "ждёт до " << best.getCallTime().toString()
                 << " (заявка #" << best.getId() << ": "
@@ -613,7 +594,6 @@ void Lift::decideNextMove() {
             isMoving = false;
             return;
         }
-        
 
         // Определяем направление к выбранной заявке
         if (best.getFromFloor() > currentFloor) {
@@ -625,7 +605,7 @@ void Lift::decideNextMove() {
             isMoving = true;
         }
         else {
-            isMoving = false;
+            isMoving = false;           // Уже на месте
             return;
         }
 
